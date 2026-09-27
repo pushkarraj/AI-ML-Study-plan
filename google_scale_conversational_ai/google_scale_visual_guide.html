@@ -352,8 +352,159 @@ tr:hover td{background:var(--surface2)}
 
 <div class="co"><b>Key insight:</b> DC-Copilot ke 3 patterns already Google-scale ready hain — two-phase design (chatInitialize + chat), DeferredDynamoDBSaver + FIXED_CHECKPOINT_ID, aur 3-layer tenant isolation. In changes ke saath yeh patterns scale karenge bina todhe.</div>
 
+<!-- ═══════════════ LATENCY TECHNIQUES ═══════════════ -->
+<h2><span class="num">04b</span> 9 Latency Optimization Techniques — Har Millisecond Ka Hisaab</h2>
+<p class="h2-sub">Without optimization: 815ms. With: 120ms. 6.8x improvement. Har technique ka contribution:</p>
+
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin:1rem 0">
+
+<div class="card" style="border-left:3px solid var(--text3)">
+<div style="font-family:Outfit;font-weight:700;font-size:.85rem;margin-bottom:4px">1. Anycast DNS + Cache</div>
+<div style="font-size:.78rem;color:var(--text2)"><b style="color:var(--green)">2ms</b> (fallback: 5ms)</div>
+<div style="font-size:.75rem;color:var(--text3);margin-top:4px">Ek IP, sabse paas ka server respond kare. Client DNS cache = 0ms repeat. Jaise toll-free number — nearest call center uthata hai.</div>
+</div>
+
+<div class="card" style="border-left:3px solid var(--text3)">
+<div style="font-family:Outfit;font-weight:700;font-size:.85rem;margin-bottom:4px">2. Edge PoP Same City</div>
+<div style="font-size:.78rem;color:var(--text2)"><b style="color:var(--green)">3ms</b> (fallback: 10ms)</div>
+<div style="font-size:.75rem;color:var(--text3);margin-top:4px">TLS handshake user ke paas (PoP) pe hota hai, not distant server. Mumbai→Virginia = 200ms, Mumbai→Mumbai PoP = 2ms.</div>
+</div>
+
+<div class="card" style="border-left:3px solid var(--blue)">
+<div style="font-family:Outfit;font-weight:700;font-size:.85rem;margin-bottom:4px">3. gRPC (Binary Protocol)</div>
+<div style="font-size:.78rem;color:var(--text2)"><b style="color:var(--green)">5ms</b> (REST: 15ms) <b style="color:var(--accent)">— saves 10ms</b></div>
+<div style="font-size:.75rem;color:var(--text3);margin-top:4px">Protobuf binary = 58% chhota JSON se. HTTP/2 multiplexing = 100 requests ek connection pe. Google internally sab gRPC pe.</div>
+</div>
+
+<div class="card" style="border-left:3px solid var(--amber)">
+<div style="font-family:Outfit;font-weight:700;font-size:.85rem;margin-bottom:4px">4. DAX In-Memory Cache</div>
+<div style="font-size:.78rem;color:var(--text2)"><b style="color:var(--green)">&lt;1ms</b> (DDB direct: 15ms) <b style="color:var(--accent)">— saves 14ms</b></div>
+<div style="font-size:.75rem;color:var(--text3);margin-top:4px">DynamoDB ke aage RAM cache. 95% hit rate. Microwave vs oven — dono garam karte hain par microwave instant. $10.5K/mo saves $700K/mo.</div>
+</div>
+
+<div class="card" style="border-left:3px solid var(--red)">
+<div style="font-family:Outfit;font-weight:700;font-size:.85rem;margin-bottom:4px">5. DistilBERT Intent (Not LLM!)</div>
+<div style="font-size:.78rem;color:var(--text2)"><b style="color:var(--green)">2ms</b> (LLM: 200ms) <b style="color:var(--red)">— saves 198ms (BIGGEST WIN)</b></div>
+<div style="font-size:.75rem;color:var(--text3);margin-top:4px">66M params vs GPT-4 1.7T. CPU pe chalta hai, GPU nahi chahiye. 95% accuracy. Ant uthane ke liye crane nahi chahiye.</div>
+</div>
+
+<div class="card" style="border-left:3px solid var(--purple)">
+<div style="font-family:Outfit;font-weight:700;font-size:.85rem;margin-bottom:4px">6. Parallel Memory Retrieval</div>
+<div style="font-size:.78rem;color:var(--text2)"><b style="color:var(--green)">7ms</b> (sequential: 9ms)</div>
+<div style="font-size:.75rem;color:var(--text3);margin-top:4px">Redis (0.5ms) + Bigtable (3ms) + Milvus (5ms) = parallel max = 5ms + 2ms merge. Teeno ek saath, wait for slowest.</div>
+</div>
+
+<div class="card" style="border-left:3px solid var(--red)">
+<div style="font-family:Outfit;font-weight:700;font-size:.85rem;margin-bottom:4px">7. vLLM + Speculative Decode</div>
+<div style="font-size:.78rem;color:var(--text2)"><b style="color:var(--green)">100ms</b> (API: 500ms+) <b style="color:var(--accent)">— saves 400ms+</b></div>
+<div style="font-size:.75rem;color:var(--text3);margin-top:4px">Self-hosted = no network hop. PagedAttention = 10x concurrent/GPU. Draft model 5 tokens → target verify batch → 2.5x speedup.</div>
+</div>
+
+<div class="card" style="border-left:3px solid var(--green)">
+<div style="font-family:Outfit;font-weight:700;font-size:.85rem;margin-bottom:4px">8. Persistent WebSocket</div>
+<div style="font-size:.78rem;color:var(--text2)"><b style="color:var(--green)">7ms</b> (new conn: 45ms)</div>
+<div style="font-size:.75rem;color:var(--text3);margin-top:4px">Connection ek baar open, reuse karo. No TLS re-handshake. Token batching: 3-5 tokens per 50ms = 4x less network frames.</div>
+</div>
+
+<div class="card" style="border-left:3px solid var(--text3)">
+<div style="font-family:Outfit;font-weight:700;font-size:.85rem;margin-bottom:4px">9. Safety Buffer (Jitter)</div>
+<div style="font-size:.78rem;color:var(--text2)"><b style="color:var(--text3)">8ms</b> reserved for variance</div>
+<div style="font-size:.75rem;color:var(--text3);margin-top:4px">P99 tail latency absorption. Network jitter, GC pauses, kernel scheduling. Hedged requests for outlier elimination (Google "Tail at Scale" paper).</div>
+</div>
+
+</div>
+
+<!-- ═══════════════ DATABASE ENGINEERING ═══════════════ -->
+<h2><span class="num">04c</span> Database Engineering — 6 DBs, Sharding, Partitioning, Resilience</h2>
+<p class="h2-sub">Har DB apne forte pe. Sharding 4 strategies. Circuit breakers on every dependency.</p>
+
+<div class="card">
+<table>
+<tr><th>Database</th><th>Type</th><th>Kya Store</th><th>Size</th><th>Latency</th><th>Sharding</th><th>Why This DB</th></tr>
+<tr><td style="color:var(--red);font-weight:600">Redis</td><td>Key-Value</td><td>Hot state, L2 cache, idempotency</td><td>400GB</td><td>&lt;0.5ms</td><td>Consistent hash, 64 shards, 150 vnodes</td><td>RAM-based = fastest. DDB too slow for hot path.</td></tr>
+<tr><td style="color:var(--amber);font-weight:600">DynamoDB</td><td>Key-Value</td><td>Session checkpoints</td><td>1TB</td><td>&lt;1ms (DAX)</td><td>Hash on session UUID (not tenant!)</td><td>Managed, Global Tables 8 regions, auto-scale.</td></tr>
+<tr><td style="color:var(--purple);font-weight:600">Bigtable</td><td>Wide-Column</td><td>Episodic + semantic memory</td><td>125TB</td><td>&lt;5ms</td><td>Range on user_id#rev_timestamp</td><td>100TB at $2.6K/mo (DDB = $25K). Row scan fast.</td></tr>
+<tr><td style="color:var(--blue);font-weight:600">Milvus</td><td>Vector DB</td><td>10B doc embeddings (kNN)</td><td>60TB</td><td>&lt;10ms</td><td>Tenant-based, 200 shards, IVF-PQ</td><td>HNSW = 60TB RAM (impossible). IVF-PQ = 1.8TB.</td></tr>
+<tr><td style="color:var(--teal);font-weight:600">Neo4j</td><td>Graph DB</td><td>Procedural memory (workflows)</td><td>10TB</td><td>&lt;15ms</td><td>Per-region clusters</td><td>Graph traversal native. SQL recursive JOIN = slow.</td></tr>
+<tr><td style="color:var(--green);font-weight:600">Snowflake</td><td>SQL</td><td>Source of truth (maintenance)</td><td>∞</td><td>50-2000ms</td><td>Micro-partitioned by date</td><td>Complex JOINs, analytics. Behind 3-layer cache.</td></tr>
+</table>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:1rem 0">
+<div class="card">
+<div style="font-family:Outfit;font-weight:700;font-size:.85rem;color:var(--red);margin-bottom:6px">Resilience Techniques</div>
+<div style="font-size:.78rem;color:var(--text2);line-height:1.8">
+<b>Replication:</b> 3 replicas per shard, auto-failover &lt;5s<br>
+<b>Circuit Breaker:</b> CLOSED→OPEN→HALF_OPEN, prevents cascading<br>
+<b>Retry + Backoff:</b> exponential (100→200→400ms) + jitter<br>
+<b>WAL:</b> Write-Ahead Log = zero data loss on crash<br>
+<b>Chaos Engineering:</b> Monthly game days, kill regions deliberately<br>
+<b>Graceful Degradation:</b> Redis miss→DAX→DDB→cached→FAQ→error page
+</div>
+</div>
+
+<div class="card">
+<div style="font-family:Outfit;font-weight:700;font-size:.85rem;color:var(--blue);margin-bottom:6px">Sharding Strategies</div>
+<div style="font-size:.78rem;color:var(--text2);line-height:1.8">
+<b>Hash-Based:</b> uniform, no range queries. Redis sessions.<br>
+<b>Consistent Hashing:</b> add shard = 1/N rehash (not all). 150 vnodes.<br>
+<b>Range-Based:</b> time-series scan fast. Bigtable row keys.<br>
+<b>Tenant/Directory:</b> single-shard queries. Milvus vectors.<br>
+<b>Partitioning:</b> Horizontal (row split, 225x faster queries) ·
+Vertical (column split, 17x less I/O) · Functional (6 DBs, polyglot)
+</div>
+</div>
+</div>
+
+<div class="co"><b>CAP Theorem:</b> Redis = CP (consistent, partition tolerant). DynamoDB cross-region = AP (available, eventual). Same-region DynamoDB = CP (strong consistency). Bigtable = AP. PACELC: latency is king → EL preference for most reads.</div>
+
+<!-- ═══════════════ LLM INFERENCE DEEP DIVE ═══════════════ -->
+<h2><span class="num">04d</span> LLM Inference Optimization Stack — 6 Techniques</h2>
+
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin:1rem 0">
+
+<div class="card" style="border-top:3px solid var(--red)">
+<div style="font-family:Outfit;font-weight:700;font-size:.85rem">vLLM + PagedAttention</div>
+<div style="font-size:.75rem;color:var(--text3);margin-top:4px">GPU memory ko pages mein manage. Naive: 40 concurrent/GPU. vLLM: 400 concurrent/GPU (10x). Hotel room analogy — sirf utne rooms do jitne chahiye, pehle se reserve nahi.</div>
+<div style="font-size:.78rem;color:var(--green);margin-top:4px">Throughput: 3-5x improvement</div>
+</div>
+
+<div class="card" style="border-top:3px solid var(--red)">
+<div style="font-family:Outfit;font-weight:700;font-size:.85rem">Speculative Decoding</div>
+<div style="font-size:.75rem;color:var(--text3);margin-top:4px">7B draft → 5 tokens (10ms). 70B verify batch (20ms). 5 tokens in 30ms vs 100ms. Junior draft likhta hai, senior ek baar review. 75% acceptance rate.</div>
+<div style="font-size:.78rem;color:var(--green);margin-top:4px">Speed: 2.5x faster generation</div>
+</div>
+
+<div class="card" style="border-top:3px solid var(--red)">
+<div style="font-family:Outfit;font-weight:700;font-size:.85rem">Continuous Batching</div>
+<div style="font-size:.75rem;color:var(--text3);margin-top:4px">Request khatam → turant hataao, naya daalo. Bus analogy — passenger utra? Turant naya bithao. Static: 200 tok/s/GPU. Continuous: 600 tok/s/GPU.</div>
+<div style="font-size:.78rem;color:var(--green);margin-top:4px">Throughput: 3-5x vs static batch</div>
+</div>
+
+<div class="card" style="border-top:3px solid var(--amber)">
+<div style="font-family:Outfit;font-weight:700;font-size:.85rem">INT8 Quantization</div>
+<div style="font-size:.75rem;color:var(--text3);margin-top:4px">32-bit → 8-bit weights. 140GB → 70GB. Memory-bandwidth bound → less data read = faster. Photo compression analogy — JPEG vs RAW, looks same.</div>
+<div style="font-size:.78rem;color:var(--green);margin-top:4px">Speed: 2x, Quality: 99% retained</div>
+</div>
+
+<div class="card" style="border-top:3px solid var(--blue)">
+<div style="font-family:Outfit;font-weight:700;font-size:.85rem">Tensor Parallelism</div>
+<div style="font-size:.75rem;color:var(--text3);margin-top:4px">70B model → 2 GPUs (70GB each). Parallel compute + NVLink AllReduce (0.1ms). 8 log milke heavy table uthayein. TP=2 sweet spot for 70B.</div>
+<div style="font-size:.78rem;color:var(--green);margin-top:4px">Speed: near-linear with GPU count</div>
+</div>
+
+<div class="card" style="border-top:3px solid var(--purple)">
+<div style="font-family:Outfit;font-weight:700;font-size:.85rem">TensorRT-LLM + Kernel Fusion</div>
+<div style="font-size:.75rem;color:var(--text3);margin-top:4px">3 GPU operations → 1 fused. 2 memory round-trips saved per fusion. 70B model = 800 ops/step → fusion saves ~16ms/decode. ECU tune jaisa.</div>
+<div style="font-size:.78rem;color:var(--green);margin-top:4px">Speed: 2-3x per-op improvement</div>
+</div>
+
+</div>
+
+<div class="co"><b>Combined impact:</b> Naive (no optimization): TTFT=500-800ms, 50 tok/s/GPU. All optimized: TTFT=50-100ms, 600 tok/s/GPU. 5-10x latency, 12x throughput. This is why $18M/yr works instead of $200M/yr.</div>
+
 <!-- ═══════════════ COST BREAKDOWN ═══════════════ -->
-<h2><span class="num">05</span> Cost Breakdown — $43M/year = ₹3.6/user/year</h2>
+<h2><span class="num">05</span> Cost Breakdown — $43M → $18M/year (Optimized)</h2>
 
 <div class="diagram" style="padding:20px">
 <svg viewBox="0 0 800 100" xmlns="http://www.w3.org/2000/svg" font-family="Outfit, system-ui, sans-serif">
@@ -392,9 +543,86 @@ tr:hover td{background:var(--surface2)}
 
 <div class="co"><b>"Long-term memory kaise?"</b> — (1) 5-tier pyramid, (2) Post-conv extraction (LLM+NER), (3) Ebbinghaus decay e^(-t/S), (4) Retrieve: recency×relevance×importance, (5) Bigtable 100TB $2.6K/mo, (6) GDPR right-to-forget, (7) $0.0016/user/year</div>
 
-<div class="co"><b>"Cost kitna?"</b> — $43M/year for 1B users = ₹3.6/user/year. GPU = 61%. Model routing saved $45M/year. Comparable to WhatsApp infra minus media storage.</div>
+<div class="co"><b>"Cost kitna?"</b> — Original $43M/yr → Optimized $18M/yr (Spot 60% + Reserved + Model routing). ₹1.5/user/year. GPU 61% of cost — model routing saved $45M/yr.</div>
 
-<p style="color:var(--text3);font-size:.78rem;margin-top:2.5rem;text-align:center;padding-bottom:1.5rem">Google L5 ML Engineer Interview Prep · DC-Copilot Architecture Analysis · 50M Concurrent Scale</p>
+<div class="co"><b>"Security kaise?"</b> — JWT (0.1ms verify, stateless) + mTLS (Istio service mesh) + DDoS (3-layer: CDN→Gateway→App) + Rate limiting (token bucket 10/sec/user, Redis distributed) + WAF</div>
+
+<div class="co"><b>"Monitoring kaise?"</b> — 3 pillars: Metrics (Prometheus+Grafana, RED+USE), Logs (ELK, structured JSON, 1% sampling), Traces (Jaeger/OTel, request journey). SLO: P99 TTFT &lt;150ms, 99.95% availability, error budget = 0.1%</div>
+
+<div class="co"><b>"Deploy kaise safely?"</b> — Canary: 1%→10%→50%→100% with auto-rollback (Flagger). ArgoCD GitOps. Feature flags for instant enable/disable. Blue-green for zero-downtime DB migrations.</div>
+
+<!-- ═══════════════ NEW: SECTIONS 12-22 SUMMARY ═══════════════ -->
+<h2><span class="num">07</span> Extended Architecture (Sections 12-22)</h2>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:1rem 0">
+
+<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px">
+<div style="font-family:Outfit;font-weight:700;font-size:.85rem;color:#ec4899;margin-bottom:6px">12. Security & Auth</div>
+<table style="font-size:.78rem"><tr><td style="color:var(--text3);width:80px">AuthN</td><td>JWT RS256, 15min access + 7d refresh token</td></tr>
+<tr><td style="color:var(--text3)">AuthZ</td><td>Role-based (technician/admin/viewer)</td></tr>
+<tr><td style="color:var(--text3)">Internal</td><td>mTLS via Istio service mesh, &lt;0.5ms overhead</td></tr>
+<tr><td style="color:var(--text3)">DDoS</td><td>Cloudflare edge + Envoy rate limit + JWT filter</td></tr></table>
+</div>
+
+<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px">
+<div style="font-family:Outfit;font-weight:700;font-size:.85rem;color:#ec4899;margin-bottom:6px">13. Rate Limiting</div>
+<table style="font-size:.78rem"><tr><td style="color:var(--text3);width:80px">Algorithm</td><td>Token Bucket (burst OK) — 10 req/sec/user</td></tr>
+<tr><td style="color:var(--text3)">Distributed</td><td>Redis INCR atomic counter, global across pods</td></tr>
+<tr><td style="color:var(--text3)">Per-tenant</td><td>Weighted fair queue, big tenant capped</td></tr>
+<tr><td style="color:var(--text3)">Fallback</td><td>Redis down → local in-memory token bucket</td></tr></table>
+</div>
+
+<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px">
+<div style="font-family:Outfit;font-weight:700;font-size:.85rem;color:#06b6d4;margin-bottom:6px">14. Observability</div>
+<table style="font-size:.78rem"><tr><td style="color:var(--text3);width:80px">Metrics</td><td>Prometheus + Grafana (RED + USE metrics)</td></tr>
+<tr><td style="color:var(--text3)">Logs</td><td>Structured JSON → ELK/Loki, 1% sampling at scale</td></tr>
+<tr><td style="color:var(--text3)">Traces</td><td>Jaeger/OpenTelemetry, full request path traced</td></tr>
+<tr><td style="color:var(--text3)">SLO</td><td>P99 TTFT &lt;150ms, 99.95% uptime, error budget 0.1%</td></tr></table>
+</div>
+
+<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px">
+<div style="font-family:Outfit;font-weight:700;font-size:.85rem;color:#6366f1;margin-bottom:6px">15. Deployment</div>
+<table style="font-size:.78rem"><tr><td style="color:var(--text3);width:80px">Strategy</td><td>Canary: 1%→10%→50%→100% with Flagger</td></tr>
+<tr><td style="color:var(--text3)">GitOps</td><td>ArgoCD, git push = deploy</td></tr>
+<tr><td style="color:var(--text3)">Feature Flags</td><td>LaunchDarkly/Redis-backed, instant toggle</td></tr>
+<tr><td style="color:var(--text3)">Rollback</td><td>Auto-rollback if P99 >130ms for 5min</td></tr></table>
+</div>
+
+<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px">
+<div style="font-family:Outfit;font-weight:700;font-size:.85rem;color:#6366f1;margin-bottom:6px">16. Idempotency</div>
+<table style="font-size:.78rem"><tr><td style="color:var(--text3);width:80px">Method</td><td>X-Idempotency-Key header per request</td></tr>
+<tr><td style="color:var(--text3)">Store</td><td>Redis, 1hr TTL, ~12GB</td></tr>
+<tr><td style="color:var(--text3)">Pattern</td><td>Check key → hit=return cached, miss=process+cache</td></tr>
+<tr><td style="color:var(--text3)">Prevents</td><td>Duplicate LLM calls on network retry</td></tr></table>
+</div>
+
+<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px">
+<div style="font-family:Outfit;font-weight:700;font-size:.85rem;color:#10b981;margin-bottom:6px">17. Cost Optimization</div>
+<table style="font-size:.78rem"><tr><td style="color:var(--text3);width:80px">GPU</td><td>60% Spot + 40% Reserved = 44% savings</td></tr>
+<tr><td style="color:var(--text3)">Compute</td><td>Right-size c5.large, ARM Graviton 20% off</td></tr>
+<tr><td style="color:var(--text3)">Data</td><td>Lifecycle: hot→warm→cold→archive (S3 Glacier)</td></tr>
+<tr><td style="color:var(--text3)">Result</td><td><b>$43M → $18M/yr (58% reduction)</b></td></tr></table>
+</div>
+
+<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px">
+<div style="font-family:Outfit;font-weight:700;font-size:.85rem;color:#f59e0b;margin-bottom:6px">18. Testing at Scale</div>
+<table style="font-size:.78rem"><tr><td style="color:var(--text3);width:80px">Load Test</td><td>Per-pod limits × math (not 50M direct test)</td></tr>
+<tr><td style="color:var(--text3)">Shadow</td><td>Mirror prod traffic → shadow env, compare</td></tr>
+<tr><td style="color:var(--text3)">Integration</td><td>1% scale (500K concurrent) end-to-end</td></tr>
+<tr><td style="color:var(--text3)">Chaos</td><td>Monthly game days, kill regions deliberately</td></tr></table>
+</div>
+
+<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px">
+<div style="font-family:Outfit;font-weight:700;font-size:.85rem;color:#8b5cf6;margin-bottom:6px">19-22. Model / Queues / Moderation / Tenancy</div>
+<table style="font-size:.78rem"><tr><td style="color:var(--text3);width:80px">Model A/B</td><td>v1.0 vs v1.1, 2-week test, statistical sig.</td></tr>
+<tr><td style="color:var(--text3)">Queues</td><td>Kafka (pub/sub) + SQS (point-to-point)</td></tr>
+<tr><td style="color:var(--text3)">Moderation</td><td>Tier1 regex inline + Tier2 LlamaGuard async</td></tr>
+<tr><td style="color:var(--text3)">Tenancy</td><td>3-layer isolation + per-tenant rate limits</td></tr></table>
+</div>
+
+</div>
+
+<p style="color:var(--text3);font-size:.78rem;margin-top:2.5rem;text-align:center;padding-bottom:1.5rem">Google L5 ML Engineer Interview Prep · DC-Copilot Architecture Analysis · 50M Concurrent · 22 Sections</p>
 
 </body>
 </html>
